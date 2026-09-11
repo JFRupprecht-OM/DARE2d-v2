@@ -325,6 +325,7 @@ def _division_widget_init(widget):
     angle_mode={"choices": ["auto", "degrees", "radians"], "label": "Angle mode",
                 "tooltip": "How stored angle units are interpreted before consensus "
                            "(ensemble only): auto-detect, or force degrees/radians. "
+                           "In-process angles are always degrees, so leave on auto/degrees. "
                            "Default: auto."},
     min_cluster_size={"label": "Min cluster size", "min": 2,
                       "tooltip": "HDBSCAN minimum cluster size when grouping detections into "

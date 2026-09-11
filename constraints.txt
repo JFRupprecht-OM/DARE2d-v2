@@ -1,0 +1,12 @@
+# DARE2D pip CONSTRAINTS — pass to EVERY `pip install` in the DARE2D env:  pip install -c constraints.txt ...
+#
+# numpy must stay <1.24 (pinned 1.23.5): TensorFlow 2.12 requires numpy<1.24, and
+# dare2d/datamodule/generator/abstract_celldataset.py still uses `np.int` (removed in numpy 1.24).
+# requirements-common.txt pins the same version, but a pin in a requirements file only holds for
+# that resolve. Any LATER unconstrained `pip install` can silently replace numpy — notably
+# `pip install "napari[all]==0.4.18"`: napari requires dask[array], and current dask releases
+# declare `numpy>=1.24` for the `array` extra, so pip upgrades numpy to 2.x, which breaks
+# napari 0.4.18 itself (pydantic ValidationError for ConstantStringEncoding, "Unable to avoid
+# copy while creating an array") and TensorFlow 2.12. With this constraint pip instead backtracks
+# dask to a release compatible with numpy 1.23.5 (e.g. 2024.8.1).
+numpy==1.23.5

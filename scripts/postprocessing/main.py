@@ -31,6 +31,14 @@ What this code does:
  - CLI-driven, accepts default colors, alpha, thickness, max wedge radius, etc.
 
 Notes:
+ - ANGLE CONVENTION: the per-model inputs (division_position*.npy written by
+   scripts/inference/multistage_detection2d.py) carry the MODEL angle theta from convert_values
+   (from +row toward +col, degrees in (-90, 90]). detect_angle_units_and_convert rewrites them to
+   this script's IMAGE convention angle_img = 90 - theta (from +x/col toward +y/row, y down),
+   which draw_consensus_on_image (dx = cos, dy = sin) needs; the values saved by THIS script
+   (chosen_divisions/*.npy 'angle', CSV 'angle_deg') are therefore in the image convention.
+   In-process consumers that draw (row, col) = (cos, sin) -- the napari plugin -- must map back
+   (theta = 90 - a if a >= 0 else -90 - a); napari_dare2d._api.consensus does so.
  - This script intentionally does NOT auto-install hdbscan. If you want HDBSCAN results,
    install hdbscan in your environment; otherwise the script falls back to sklearn DBSCAN.
  - The script expects model outputs saved as "division_position{frame}.npy" under
@@ -126,6 +134,19 @@ def detect_angle_units_and_convert(all_dets, mode="auto"):
       image_angle_deg = 90.0 - model_angle_deg
     This stores signed angles in degrees in range (-90, 90].
     Modifies all_dets in-place.
+
+    Conventions (see also the module docstring):
+      - model angle theta (input): from +row toward +col, as decoded by
+        dare2d.datamodule.post_processing.regression2d_pp.convert_values and drawn by
+        regression2d_visualisation.project_point (row <- cos, col <- sin);
+      - image angle (output): from +x/col toward +y/row (y down), the standard cv2 angle used by
+        draw_consensus_on_image / polygon_sector (dx <- cos, dy <- sin) and stored as-is in the
+        CSV 'angle_deg' and chosen_divisions/*.npy of this script.
+      The two are a matched pair: a consumer that draws (row, col) = (cos, sin) -- e.g. napari's
+      detections_to_vectors -- must NOT receive image-convention angles (napari_dare2d._api.consensus
+      inverts them before returning).
+    Unit heuristic ('auto'): the median of the first 500 |angles| <= 2*pi*1.1 (~6.91) is taken as
+    radians; in-process callers whose angles are already degrees should pass mode='degrees'.
     """
     samples = []
     for f, items in all_dets.items():
@@ -185,8 +206,12 @@ def cluster_hdbscan(points_xy, eps, min_cluster_size=2, min_samples=1):
 # -------------------------
 def pick_consensus_angle_signed(raw_angles_deg):
     """
-    raw_angles_deg: list of signed angles in degrees (image convention)
-    Returns chosen_signed_angle and debug dict.
+    raw_angles_deg: list of signed angles in degrees (image convention, i.e. 90 - theta_model as
+        produced by detect_angle_units_and_convert; the pick is invariant under that rewrite
+        because |fold(90 - t)| == 90 - |t| on (-90, 90], so the same member is chosen in either
+        convention -- only its label differs)
+    Returns chosen_signed_angle (one member's angle, a representative pick -- not an average)
+    and a debug dict.
     """
     arr = np.array(raw_angles_deg, dtype=float)
     if arr.size == 0:

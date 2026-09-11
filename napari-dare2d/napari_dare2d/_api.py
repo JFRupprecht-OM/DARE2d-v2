@@ -356,7 +356,12 @@ def consensus(all_dets, n_frames, eps=10, min_models=6, num_models=8, angle_mode
     ponytail: mirrors the clustering/aggregation core of
     ``scripts.postprocessing.main.process_all_frames`` but drops the wedge/halo
     drawing, TIFF/CSV writing and temporal dedup, which a napari overlay does
-    not need. Reuses the same aggregation primitives so results stay identical.
+    not need. Reuses the same aggregation primitives (same picked model, same
+    median/std/support fields as the CLI). The ONLY difference: ``angle`` is
+    returned in the MODEL convention (theta from +row toward +col, exactly like
+    ``infer_stack`` dicts), not in main.py's image convention (90 - theta) that
+    its cv2 renderer needs -- so ``to_layer_data`` / ``save_results`` draw
+    consensus and single-set dicts alike.
     """
     from scripts.postprocessing.main import (  # deferred (heavy); see module-top note
         aggregate_cluster_pick_signed,
@@ -387,6 +392,16 @@ def consensus(all_dets, n_frames, eps=10, min_models=6, num_models=8, angle_mode
                     cluster_items, min_models=min_models, total_models=num_models
                 )
                 if c is not None:
+                    # main.py aggregates in ITS image convention (ang_img = fold(90 - theta),
+                    # measured from +x/col toward +y/row), which only its own cv2 renderer
+                    # needs (draw_consensus_on_image: dx = cos, dy = sin). napari's
+                    # detections_to_vectors and _data.save_results expect the MODEL
+                    # convention theta (from +row toward +col, as convert_values and the
+                    # single-set dicts), so map the picked angle back. Exact inverse of
+                    # fold(90 - theta) on (-90, 90]; every other field (picked model,
+                    # angle_std_deg, medians, support) stays exactly as the CLI computes it.
+                    a = float(c["angle"])
+                    c["angle"] = 90.0 - a if a >= 0.0 else -90.0 - a
                     cons.append(c)
         out[fidx] = cons
     return out
@@ -396,7 +411,12 @@ def consensus(all_dets, n_frames, eps=10, min_models=6, num_models=8, angle_mode
 # Map detections / consensus -> napari layer data
 # ---------------------------------------------------------------------------
 # Both infer_stack detections and consensus() dicts share the keys
-# {x, y, angle, length}, so the same mapping serves both. The ONLY difference
+# {x, y, angle, length} AND the same angle convention (theta from +row toward
+# +col, as decoded by convert_values): consensus() maps main.py's image-convention
+# angle (90 - theta, needed only by its cv2 renderer) back before returning, so the
+# same mapping serves both. NOTE the standalone CLI's outputs (post_processed CSV
+# ``angle_deg``, chosen_divisions/*.npy) keep the image convention and are NOT
+# interchangeable with these dicts without that mapping. The other difference
 # is the frame-key base: infer_stack keys are 0-based (use frame_base=0),
 # consensus keys are 1-based (use frame_base=1). napari frame index t = key - frame_base.
 #

@@ -47,7 +47,8 @@ so they can be unit-tested headlessly (see `verify_*.py`) and reused outside nap
 
 - **Model building / inference** — `build_models` (Hydra-instantiate the two TF models from
   `best.h5`), `infer_stack` (two-stage detection over a `(T,Y,X)` stack), `run_ensemble`
-  (every model set), `consensus` (HDBSCAN/DBSCAN clustering + aggregation across models).
+  (every model set), `consensus` (HDBSCAN/DBSCAN clustering + aggregation across models; the
+  returned `angle` is in the same model convention as `infer_stack` dicts, see below).
 - **Layer mapping** — `detections_to_points` / `detections_to_vectors` / `to_layer_data`
   turn `{frame: [{x,y,angle,length}]}` into napari `LayerDataTuple`s.
 - **Annotations** — `annotation_pairs` / `annotations_to_layer_data` read `division_position*.npy`.
@@ -64,6 +65,12 @@ so they can be unit-tested headlessly (see `verify_*.py`) and reused outside nap
 - Ground-truth `division_position{n}.npy` rows are `[row, col, frame]` (= `[y, x, frame]`, the order
   the training pipeline reads); `frame` is **1-based**, so napari `t = frame − 1`. Consecutive rows
   are the two daughter cells of one division.
+- Consensus dicts (and the saved `*_summary.csv` `angle` column) use the **same θ** as single-set
+  runs (from +row toward +col, as `convert_values` decodes it). The standalone CLI
+  `scripts/postprocessing/main.py` instead stores `angle_deg = 90 − θ` folded to (−90, 90] (from
+  +x/col toward +y/row, for its cv2 renderer); `_api.consensus` maps that back with
+  `θ = 90 − a` if `a ≥ 0` else `−90 − a`. `verify_consensus_layers.py` asserts that a consensus of
+  identical detections draws parallel to the single-set axis.
 
 ## Backends
 

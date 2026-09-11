@@ -2,7 +2,9 @@
 #
 # HARD CONSTRAINT: numpy must stay <1.24 — TensorFlow 2.12 requires it, and Torch 2.6 is
 # numpy-1.23 compatible, so this single pin holds for both backends. Install into a fresh
-# conda env (python 3.10) so nothing gets re-resolved against newer numpy.
+# conda env (python 3.10) and pass `-c constraints.txt` (repo root, same numpy pin) to EVERY
+# pip install: the pin below only governs this resolve, and a later unconstrained install
+# (e.g. `pip install "napari[all]"`) can replace numpy with 2.x.
 #
 # You normally don't install this directly: requirements-tf.txt and requirements-torch.txt
 # each pull it in via `-r requirements-common.txt`.
@@ -35,6 +37,9 @@ gdown
 ipykernel
 
 # --- napari (GUI) ---
-# Install napari as a SEPARATE README step (`pip install "napari[all]"`): pinning it here
-# next to numpy 1.23.5 does not reliably pull a Qt backend on a fresh resolve. napari brings
-# magicgui + npe2 with it.
+# Install napari as a SEPARATE README step, UNDER THE NUMPY CONSTRAINT:
+#     pip install -c constraints.txt "napari[all]==0.4.18"
+# napari 0.4.18 requires dask[array]; current dask releases declare numpy>=1.24 for that extra,
+# so an unconstrained install upgrades numpy to 2.x and breaks napari 0.4.18 (pydantic
+# ValidationError for ConstantStringEncoding) and TensorFlow 2.12. With -c, pip backtracks dask
+# (e.g. to 2024.8.1) and keeps numpy 1.23.5. napari brings magicgui + npe2 + PyQt5 with it.

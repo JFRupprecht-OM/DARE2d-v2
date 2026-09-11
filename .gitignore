@@ -68,3 +68,9 @@ HANDOFF.md
 # --- agent/session files (never published) ---
 CLAUDE.md
 .claude/
+
+# --- local-only working folders (never committed or pushed) ---
+# docs/: Claude/agent planning docs, audit notes, progress logs, handoffs, session summaries.
+# DARE_2D3D_RevTexStyle_011225/: the paper / manuscript folder (authoritative local copy).
+docs/
+DARE_2D3D_RevTexStyle_011225/

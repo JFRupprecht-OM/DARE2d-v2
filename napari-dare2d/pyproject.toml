@@ -13,11 +13,11 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
 ]
 # IMPORTANT: dependencies are intentionally EMPTY. This plugin runs inside the
-# carefully version-pinned env `napari-env-for-DARE2D` (numpy 1.23.5 is
-# the pivot; TF 2.12 forbids numpy>=1.24, napari 0.4.18 is the last napari that
-# tolerates numpy 1.23). Listing napari/numpy/etc. here would let `pip install -e .`
-# re-resolve and silently pull numpy>=2, breaking TensorFlow. Keep this empty;
-# install runtime deps into the env explicitly (see README.md).
+# version-pinned DARE2D env (numpy 1.23.5 is the pivot: TF 2.12 forbids numpy>=1.24 and
+# the shipped napari is 0.4.18, which does not work on numpy 2). Listing napari/numpy/etc.
+# here would let `pip install -e .` re-resolve and silently pull numpy>=2, breaking
+# napari 0.4.18 and TensorFlow. Keep this empty; install runtime deps into the env
+# explicitly and always with `-c constraints.txt` (repo root) — see README.md.
 dependencies = []
 
 [project.entry-points."napari.manifest"]

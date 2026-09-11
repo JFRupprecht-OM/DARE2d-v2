@@ -93,29 +93,33 @@ DARE2D has **two interchangeable backends** — TensorFlow/Keras and PyTorch —
 way: a shared stack (**`requirements-common.txt`**) plus one or both of **`requirements-tf.txt`**
 / **`requirements-torch.txt`** (each pulls in the shared stack via `-r`). The one hard constraint
 is **numpy `<1.24`** (pinned to `1.23.5`): TensorFlow 2.12 requires it and Torch 2.6 is compatible
-with it, so the pin holds for both. Use a fresh conda env so nothing is re-resolved against newer
-numpy.
+with it, so the pin holds for both. Use a fresh conda env, and pass **`-c constraints.txt`** to every
+`pip install`: a pin inside a requirements file only holds for that one resolve, and a later
+unconstrained install (notably `napari[all]`, whose `dask[array]` dependency asks for `numpy>=1.24`)
+would silently replace numpy with 2.x and break both napari 0.4.18 and TensorFlow.
 
 ```bash
-git clone https://github.com/qazi05/DARE2d
-cd DARE2d
+git clone https://github.com/JFRupprecht-OM/DARE2d-v2
+cd DARE2d-v2
 
 # 1) conda environment
-conda create -n dare2d-napari python=3.10 -y
-conda activate dare2d-napari
+conda create -n dare2d-v2 python=3.10 -y
+conda activate dare2d-v2
 
-# 2) backend dependencies — each file includes the shared stack (requirements-common.txt).
+# 2) backend dependencies in ONE resolve — each file includes the shared stack (requirements-common.txt).
 #    The napari plugin offers both backends in one dropdown, so for the full plugin install both:
-pip install -r requirements-tf.txt        # TensorFlow / Keras backend (CPU)
-pip install -r requirements-torch.txt     # PyTorch backend (GPU / CUDA)
+pip install -c constraints.txt -r requirements-tf.txt -r requirements-torch.txt
 
-# 3) napari + its Qt backend — installed explicitly: pinning napari[all] in the requirements
-#    does not reliably pull a Qt backend on a fresh resolve.
-pip install "napari[all]==0.4.18"
+# 3) napari + its Qt backend (PyQt5), installed as its own step but under the same numpy constraint:
+#    with -c, pip backtracks dask to a numpy-1.23-compatible release instead of upgrading numpy.
+pip install -c constraints.txt "napari[all]==0.4.18"
 
 # 4) the DARE2D core, then the plugin (no deps -> don't disturb the pins)
-pip install -e .
+pip install -c constraints.txt -e .
 pip install --no-build-isolation --no-deps -e ./napari-dare2d
+
+# 5) sanity check — must print 1.23.5 and raise nothing
+python -c "import numpy, napari.layers, tensorflow, torch; print(numpy.__version__)"
 ```
 
 > On a corporate network you may need `--trusted-host pypi.org --trusted-host files.pythonhosted.org`.
@@ -197,10 +201,18 @@ standalone CLI:
 
 1. **Spatial clustering** — detections are grouped by proximity with HDBSCAN (DBSCAN fallback if
    `hdbscan` isn't installed), the radius scaled to cell size, so detections of the same cell merge.
-2. **Temporal de-duplication** — within a cluster, repeats across neighbouring frames are collapsed
-   so a cell isn't counted several times.
-3. **Consensus** — median position, angle and axis length per cluster, plus uncertainty
+2. **Temporal de-duplication** (standalone CLI only) — repeats of a cluster across consecutive
+   frames are collapsed so a cell isn't counted several times; the napari plugin clusters each
+   frame independently and skips this step.
+3. **Consensus** — median position and axis length per cluster; the angle is the member angle
+   closest to the cluster's mean |angle| (a representative pick, not an average), plus uncertainty
    (`angle_std_deg`, `length_std`, `pos_std`) and the number of agreeing models.
+
+**Angle conventions.** Per-model detections and the napari plugin (single-set *and* ensemble) use
+θ measured from +row toward +col, as `convert_values` decodes it. The standalone CLI works in its
+own image convention `angle_deg = 90 − θ` folded to (−90, 90] (from +x/col toward +y/row, what its
+cv2 renderer draws) and stores that value in its CSV and `chosen_divisions/*.npy`;
+`napari_dare2d._api.consensus` maps it back to θ before returning.
 
 **Parameters** (same names in the API, notebook and CLI):
 
@@ -209,7 +221,7 @@ standalone CLI:
 | `eps` | spatial clustering radius (px), ≈ cell size | `10` |
 | `min_models` | models that must agree to keep a cluster | `6` |
 | `num_models` | models in the ensemble | `8` |
-| `angle_mode` | angle-unit handling (`auto` / `degrees` / `radians`) | `auto` |
+| `angle_mode` | angle-unit handling (`auto` / `degrees` / `radians`); in-process (plugin) angles are always degrees | `auto` |
 
 **Standalone CLI** (the notebook/plugin do this for you):
 ```bash
@@ -273,12 +285,24 @@ plugin defaults to `models/demo/neuroepithelium/{regression,segmentation}_checkp
 button fills these), while `scripts/all_model_inference.py` reads `regression_checkpoints/` /
 `segmentation_checkpoints/` under its `BASE_DIR` — set that to your project root.
 
-**Import errors / `ModuleNotFoundError`.** Activate the env (`conda activate dare2d-napari`) and
-install both requirement files (`pip install -r requirements-tf.txt -r requirements-torch.txt`)
-plus the editable packages (`pip install -e .` and the plugin). There is no bare `requirements.txt`.
+**Import errors / `ModuleNotFoundError`.** Activate the env (`conda activate dare2d-v2`) and
+install both requirement files (`pip install -c constraints.txt -r requirements-tf.txt -r requirements-torch.txt`)
+plus the editable packages (`pip install -c constraints.txt -e .` and the plugin). There is no bare `requirements.txt`.
+
+**`napari` aborts at start-up with `pydantic ... ValidationError: 1 validation error for
+ConstantStringEncoding` / `Unable to avoid copy while creating an array (np.array(obj, copy=False))`
+(and `import tensorflow` fails with a `TypeError` in `dtypes.py`).** numpy 2.x got into the env —
+typically because napari was installed without `-c constraints.txt`: napari 0.4.18 needs `dask[array]`,
+current dask releases require `numpy>=1.24` for that extra, and pip upgrades numpy to the newest
+release. napari 0.4.18 and TensorFlow 2.12 both need numpy < 1.24. Repair in place (pip downgrades
+numpy and backtracks dask, nothing else changes):
+```bash
+pip install -c constraints.txt "numpy==1.23.5" "dask[array]"
+python -c "import numpy, napari.layers, tensorflow; print(numpy.__version__)"   # 1.23.5
+```
 
 **napari opens but the DARE2D widgets aren't listed / no Qt backend.** Install napari with a Qt
-backend explicitly (`pip install "napari[all]"`), then reinstall the plugin with
+backend explicitly (`pip install -c constraints.txt "napari[all]==0.4.18"`), then reinstall the plugin with
 `--no-deps --no-build-isolation` so the numpy pin isn't disturbed.
 
 **napari closes/crashes spuriously (often after a flood of `Unable to open monitor interface to
@@ -311,3 +335,8 @@ WSL note above).
 
 MIT — see [LICENSE](LICENSE). This work was granted access to the HPC resources of IDRIS under the
 allocation AD010314339 made by GENCI.
+
+**Use of AI assistance.** Anthropic's Claude (Claude Code) was used to edit and correct the napari
+plugin (`napari-dare2d/`), in particular the consensus-orientation fix and its regression tests, and
+to correct the environment-setup procedure (`constraints.txt`, installation instructions). All
+changes were reviewed and validated by the authors, who remain responsible for the code.
