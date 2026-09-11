@@ -127,20 +127,26 @@ python -c "import numpy, napari.layers, tensorflow, torch; print(numpy.__version
 > **The two backends are peers.** `requirements-tf.txt` and `requirements-torch.txt` each install
 > the shared `requirements-common.txt` plus their framework; the napari widget's **Inference
 > backend** dropdown switches between `keras` (TF, CPU) and `pytorch` (GPU) — same detections,
-> parity ~1e-7. The PyTorch `.pt` weights ship with the Zenodo data (unzipped next to each
-> `best.h5`; see **Models & data**), so the `pytorch` backend uses the same checkpoint fields as
+> parity ~1e-7. The PyTorch `.pt` weights ship in the Zenodo `models.zip` next to each
+> `best.h5` (see **Models & data**), so the `pytorch` backend uses the same checkpoint fields as
 > `keras` — a retrained run dir works the same way, no rename. For a non-CUDA-12.4 machine, swap
 > `cu124` for your toolkit in `requirements-torch.txt`. (Native-Windows TF is CPU-only; GPU TF
 > training needs WSL2 — see the note under **Retraining**.)
 
 ## Models & data
 
-Published on **Zenodo** ([record 17442227](https://zenodo.org/records/17442227)):
-`regression_checkpoints.zip`, `segmentation_checkpoints.zip`, `neuroepithelium.zip`, and
-`torch_weights.zip` (pre-converted `best.pt` for the GPU/`pytorch` backend, unzipped next to
-each `best.h5`). Demo datasets are grouped under a `demo/` namespace (neuroepithelium is the first;
-others can be added alongside it). The napari plugin reads checkpoints from
-`models/demo/neuroepithelium/` and the dataset from `data/demo/neuroepithelium/` (kept local, not in git):
+Published on **Zenodo** under the concept DOI [10.5281/zenodo.17442226](https://doi.org/10.5281/zenodo.17442226)
+(always resolves to the latest version). The record ships two archives whose top-level folders
+*are* the project layout, so both simply unzip at the repository root:
+
+| archive | size | contents |
+|---|---|---|
+| `data.zip` | ~0.4 GB | `data/demo/neuroepithelium/set_{1..8}/` (movie `.tiff` + `division_position*.npy`), plus `set_test/` and a test movie |
+| `models.zip` | ~2.2 GB | `models/demo/neuroepithelium/{regression,segmentation}_checkpoints/checkpoints_set_{1..8}_all_but_target/best.h5` **+** `best.pt` |
+
+Demo datasets are grouped under a `demo/` namespace (neuroepithelium is the first; others can be
+added alongside it). The napari plugin, the notebooks and the training scripts all read checkpoints
+from `models/demo/neuroepithelium/` and the dataset from `data/demo/neuroepithelium/` (kept local, not in git):
 
 ```
 models/demo/neuroepithelium/regression_checkpoints/checkpoints_set_{1..8}_all_but_target/best.h5   (+ best.pt)
@@ -148,10 +154,24 @@ models/demo/neuroepithelium/segmentation_checkpoints/checkpoints_set_{1..8}_all_
 data/demo/neuroepithelium/set_{1..8}/     # movie .tiff + division_position*.npy
 ```
 
-The easiest route is to click **DARE2D download data** in the plugin (Plugins → DARE2D), which
-fetches all of the above and places it in exactly this layout. (The command-line ensemble in
+**Download in one command** (from the activated env; ~2.6 GB, re-run to resume or fill gaps):
+
+```bash
+python -m napari_dare2d.download                  # data + models -> this repository's data/ and models/
+python -m napari_dare2d.download --only models    # or --only data
+python -m napari_dare2d.download --check          # what is present / missing, no download
+python -m napari_dare2d.download --root /path/to/DARE2d-v2 --record 21644564   # other root; pin a version
+```
+
+The downloader (`napari_dare2d/_data.py`, stdlib only) fetches the record through the Zenodo API,
+md5-verifies each archive against Zenodo's checksum, caches the zips in `_zenodo_cache/`, **never
+overwrites existing files** (so retrained `models/<run>/` folders are safe and re-running only fills
+in what is missing), and writes `_zenodo_cache/zenodo_manifest.json` recording the exact Zenodo
+version, DOI and checksums it installed. The same function backs the **Download DARE2D data**
+button in the napari widgets (Plugins → DARE2D) and the setup cell of each `notebooks/Run_dare2d_*.ipynb`,
+so all three routes produce the identical layout. (The legacy command-line ensemble in
 `scripts/all_model_inference.py` instead reads `regression_checkpoints/` /
-`segmentation_checkpoints/` under its `BASE_DIR`; unzip a copy there for CLI use.)
+`segmentation_checkpoints/` under its `BASE_DIR`; copy or symlink them there for that script.)
 
 ## Data format
 
@@ -256,7 +276,7 @@ per-frame layout the generators read, then runs the same leave-one-out training 
 and **Backend** (PyTorch GPU, TensorFlow CPU, or TensorFlow WSL GPU), then **Start retraining** — a
 progress bar tracks the epochs and an inline **Stop retraining** button cancels it. Output lands in
 `models/<run>/…` (dated; the curated `models/demo/<dataset>/` is never overwritten). If the dataset isn't present yet, a
-**Download data** button appears in the widget first.
+**Download data** button appears in the widget first (or run `python -m napari_dare2d.download`).
 
 The backends live in `training/` (native-Windows TF is CPU-only): `tf/` (a WSL2 TF-GPU path +
 native-Windows CPU `train_split.py`) and `torch/` (native-Windows GPU `train.py`), wrapped by both
@@ -281,8 +301,8 @@ python napari-dare2d/verify_api.py      # real: builds set-8 models, runs infere
 
 **Missing checkpoints / "checkpoint missing" errors.** Ensure all 8 sets are present with a
 `best.h5` (and `best.pt` for the `pytorch` backend) under the folders the tool expects: the napari
-plugin defaults to `models/demo/neuroepithelium/{regression,segmentation}_checkpoints/` (the **Download data**
-button fills these), while `scripts/all_model_inference.py` reads `regression_checkpoints/` /
+plugin defaults to `models/demo/neuroepithelium/{regression,segmentation}_checkpoints/` (`python -m napari_dare2d.download`
+or the **Download data** button fills these; `--check` lists what is missing), while `scripts/all_model_inference.py` reads `regression_checkpoints/` /
 `segmentation_checkpoints/` under its `BASE_DIR` — set that to your project root.
 
 **Import errors / `ModuleNotFoundError`.** Activate the env (`conda activate dare2d-v2`) and
@@ -317,7 +337,7 @@ updating the GPU driver, and disabling monitor sleep during use also remove the 
 
 **`pytorch` backend unavailable.** Torch isn't installed, or its CUDA build doesn't match your
 toolkit — install `requirements-torch.txt` (swap `cu124` for your CUDA version). The `.pt` weights
-must sit next to each `best.h5`; the Download button ships them.
+must sit next to each `best.h5`; `python -m napari_dare2d.download --only models` (or the Download button) ships them.
 
 **Out-of-memory.** Lower the frame range, `crop` or `batch-size` (retraining), process fewer frames,
 or use the `keras`/CPU backend for very large images.

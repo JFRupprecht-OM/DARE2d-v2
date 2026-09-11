@@ -72,9 +72,10 @@ def _pytorch_builder(sets, reg_dir, seg_dir, device=None):
 
 
 def _checkpoints_present():
-    """True once the inference checkpoints have been downloaded."""
-    return (any(_api.DEFAULT_REG_DIR.glob("checkpoints_set_*/best.h5"))
-            and any(_api.DEFAULT_SEG_DIR.glob("checkpoints_set_*/best.h5")))
+    """True once the inference checkpoints have been downloaded (either backend's weights:
+    ``best.h5`` for keras, ``best.pt`` for pytorch; Zenodo ships both side by side)."""
+    return (any(_api.DEFAULT_REG_DIR.glob("checkpoints_set_*/best.[hp]?"))
+            and any(_api.DEFAULT_SEG_DIR.glob("checkpoints_set_*/best.[hp]?")))
 
 
 def _dataset_present():
@@ -91,11 +92,15 @@ def _data_complete():
 def _add_download_section(widget, present_fn):
     """Append a 'Download DARE2D data' button (+ progress bar) that shows only when the
     data ``present_fn`` checks for is missing. Clicking downloads from Zenodo with a live
-    progress bar; the button hides itself once the data is present.
+    progress bar; the button hides itself once the data is present. Same code path as
+    ``python -m napari_dare2d.download`` (``_data.download_dataset``), same layout.
     """
-    btn = PushButton(text="Download DARE2D data (Zenodo, ~2 GB)")
-    btn.tooltip = ("Download the DARE2D checkpoints + neuroepithelium dataset from Zenodo "
-                   "(~2 GB) into this project, then this button disappears.")
+    btn = PushButton(text="Download DARE2D data + models (Zenodo, ~2.6 GB)")
+    btn.tooltip = ("Download the neuroepithelium dataset (data.zip, ~0.4 GB) and the pretrained "
+                   "checkpoints for both backends (models.zip, ~2.2 GB) from Zenodo "
+                   "(doi:10.5281/zenodo.17442226) into this project's data/demo/ and "
+                   "models/demo/ folders. Existing files are never overwritten; the archives are "
+                   "md5-verified and cached in _zenodo_cache/. Then this button disappears.")
     bar = ProgressBar(value=0)
     bar.min, bar.max = 0, 100
     bar.visible = False
@@ -111,11 +116,13 @@ def _add_download_section(widget, present_fn):
         btn.enabled = False
         bar.visible = True
         bar.label = "starting…"
-        state = {"pct": 0, "msg": "downloading…"}
+        state = {"pct": 0, "msg": "contacting Zenodo…"}
 
         def _progress(done, total):
+            # cumulative over all archives (see _data.download_dataset), so the bar never
+            # resets between data.zip and models.zip
             if total:
-                state["pct"] = int(100 * done / total)
+                state["pct"] = min(100, int(100 * done / total))
 
         @thread_worker
         def run():
@@ -133,10 +140,11 @@ def _add_download_section(widget, present_fn):
             bar.visible = False
             btn.enabled = True
             if ok:
-                btn.visible = False          # data now present -> hide the button
+                btn.visible = not present_fn()   # data now present -> hide the button
                 notifications.show_info(f"DARE2D data ready under {info}")
             else:
-                notifications.show_error(f"DARE2D download failed: {info}")
+                notifications.show_error(f"DARE2D download failed: {info}\n"
+                                         "Retry, or run: python -m napari_dare2d.download")
 
         worker = run()
         worker.returned.connect(lambda root: _finish(True, root))

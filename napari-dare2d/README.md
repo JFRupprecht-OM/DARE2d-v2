@@ -23,7 +23,8 @@ napari-dare2d/
 │   ├── napari.yaml                 # npe2 manifest: registers the 3 widgets below
 │   ├── _api.py                     # napari-free in-process API over the DARE2D pipeline
 │   ├── _widget.py                  # the magicgui dock widgets (the GUI)
-│   └── _data.py                    # Zenodo download + "save results" (stdlib-only)
+│   ├── _data.py                    # Zenodo download + "save results" (stdlib-only)
+│   └── download.py                 # CLI: python -m napari_dare2d.download (wraps _data)
 ├── verify_layers.py                # fast check: geometry + napari layer mapping (no models)
 └── verify_api.py                   # real check: builds set-8 models, runs inference + consensus
 ```
@@ -84,11 +85,19 @@ step differs:
 
 ## `_data.py` — download & save
 
-- `download_dataset(root, …)` — fetches the Zenodo record (checkpoints + dataset + torch weights)
-  with stdlib `urllib`/`zipfile` (no extra dependency), caches the zips under `_zenodo_cache/`, and
-  extracts into the project layout (`models/demo/neuroepithelium/…`, `data/demo/neuroepithelium/…`). Extraction **only
-  adds missing files** — it never overwrites, so a populated `models/` (e.g. retrained checkpoints)
-  is left intact. A progress bar in the widget is driven off this via a `QTimer`.
+- `download_dataset(root, …, record_id=…, only=…, verify=True)` — fetches the Zenodo record
+  (concept DOI `10.5281/zenodo.17442226` → latest version; `data.zip` + `models.zip`) with stdlib
+  `urllib`/`zipfile`/`hashlib` (no extra dependency), md5-verifies each archive against Zenodo's
+  checksum, caches the zips under `_zenodo_cache/`, and extracts them at `root` — the archives are
+  rooted at `data/` and `models/`, so this yields `models/demo/neuroepithelium/…` and
+  `data/demo/neuroepithelium/…` directly (members outside those folders are refused). Extraction
+  **only adds missing files** — it never overwrites, so a populated `models/` (e.g. retrained
+  checkpoints) is left intact. Writes `_zenodo_cache/zenodo_manifest.json` (resolved record id,
+  DOI, version, md5s). `progress_cb(done, total)` is cumulative over all archives; the widget's
+  progress bar is driven off it via a `QTimer`. `missing_files(root)` / `expected_paths(root)`
+  report which of the 8 sets and 32 checkpoint files are present.
+- `python -m napari_dare2d.download [--root R] [--only data|models] [--record ID] [--no-verify] [--check]`
+  (`download.py`) is the CLI over the same function; `dare2d-download` is its console-script alias.
 - `save_results(image, points, features, out_dir, …)` — writes per-frame `division_position*.npy`
   (`[x, y]` pairs), a `*_summary.csv` (frame, x, y, angle, length, …) and an optional overlay
   `*_result.tiff` movie.
@@ -115,8 +124,8 @@ python napari-dare2d/verify_api.py      # real: builds set-8 models, runs infere
 
 `verify_layers.py` asserts the coordinate conventions above and that napari accepts the produced
 layers; `verify_api.py` builds the set-8 models from `models/demo/neuroepithelium/` and runs the full pipeline on the
-set-8 stack (needs the Zenodo checkpoints + data — fetch them via the widget's **Download data**
-button).
+set-8 stack (needs the Zenodo checkpoints + data — fetch them with `python -m napari_dare2d.download`
+or the widget's **Download data** button).
 
 See the repository [`README.md`](../README.md) for the end-to-end install, inference and retraining
 walkthroughs, and [`../dare2d/`](../dare2d/) for the core package this plugin wraps.
@@ -138,9 +147,9 @@ Please cite the references relevant to your use:
 - **Method paper (preprint).** Karpinski R., Gros A., Karnat M., Saaheelur Rahaman Q., Vanaret J.,
   Saadaoui M., Tlili S., Rupprecht J.-F. (2026). *DARE: Division Axis and Region Estimation from
   2D and 3D Time-Lapse Images.* bioRxiv. DOI `10.1101/2024.02.05.578987`.
-- **Software, data & pretrained models (Zenodo archive).** Record **17442227** —
-  DOI `10.5281/zenodo.17442227` (<https://doi.org/10.5281/zenodo.17442227>): the code release,
-  model checkpoints, and the neuroepithelium dataset.
+- **Data & pretrained models (Zenodo archive).** Concept DOI `10.5281/zenodo.17442226`
+  (<https://doi.org/10.5281/zenodo.17442226>, resolves to the latest version): the model checkpoints
+  (`models.zip`, Keras `.h5` + PyTorch `.pt`) and the neuroepithelium dataset (`data.zip`).
 
 BibTeX for the paper:
 

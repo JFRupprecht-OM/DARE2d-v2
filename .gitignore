@@ -37,7 +37,7 @@ output/
 postprocessed_results/
 scores.json
 
-# --- Large model weights & data (kept locally, NOT in VCS; from Zenodo 17442227) ---
+# --- Large model weights & data (kept locally, NOT in VCS; Zenodo doi:10.5281/zenodo.17442226) ---
 data/
 models/
 set_8/
@@ -57,7 +57,8 @@ segmentation_checkpoints/
 dare2d-torch/weights_onnx/
 dare2d-torch/weights_pt/
 
-# --- downloaded Zenodo archives (the "Download data" button caches zips here) ---
+# --- downloaded Zenodo archives (the "Download data" button / `python -m napari_dare2d.download`
+#     cache data.zip + models.zip and write zenodo_manifest.json under _zenodo_cache/) ---
 *.zip
 *.part
 _zenodo_cache/

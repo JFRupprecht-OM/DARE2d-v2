@@ -8,7 +8,8 @@
 #   pip install -r requirements-torch.txt
 #
 # Different CUDA toolkit? Swap cu124 for your build (e.g. cu121) in the index URL below;
-# pip selects the matching Torch wheel. (The .pt weights ship with the Zenodo data; see README.)
+# pip selects the matching Torch wheel. (The .pt weights ship in the Zenodo models.zip next to
+# each best.h5: `python -m napari_dare2d.download`; see README "Models & data".)
 
 -r requirements-common.txt
 

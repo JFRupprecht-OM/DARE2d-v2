@@ -23,6 +23,10 @@ dependencies = []
 [project.entry-points."napari.manifest"]
 napari-dare2d = "napari_dare2d:napari.yaml"
 
+# `dare2d-download` == `python -m napari_dare2d.download` (Zenodo data + weights fetcher)
+[project.scripts]
+dare2d-download = "napari_dare2d.download:main"
+
 [tool.setuptools]
 packages = ["napari_dare2d"]
 
